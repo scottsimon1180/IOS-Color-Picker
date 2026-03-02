@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>Picker Sandbox</title>
+    
+    <style>
+        :root {
+            --app-bg: #f2f2f7; 
+            --text-primary: #000000;
+            --text-secondary: #8e8e93;
+            --tint-color: #007AFF;
+            
+            --modal-bg: #ffffff;
+            --modal-btn-bg: #f2f2f7;
+            --modal-btn-active: #e5e5ea;
+            --modal-grabber: #d1d1d6;
+            --backdrop-color: rgba(0, 0, 0, 0.4);
+
+            --seg-track-bg: #eeeeef; 
+            --seg-indicator-bg: #ffffff; 
+            --seg-indicator-shadow: 0 3px 8px rgba(0, 0, 0, 0.12), 0 3px 1px rgba(0,0,0,0.04);
+            --seg-text-active: #000000;
+            --seg-text-inactive: #8e8e93;
+
+            --slider-track: #e5e5ea;
+            
+            --mixed-color: rgb(255, 59, 48); 
+            --pure-hue: rgb(255, 0, 0); 
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --app-bg: #000000;
+                --text-primary: #ffffff;
+                --text-secondary: #8e8e93;
+                --tint-color: #0A84FF;
+                
+                --modal-bg: #1c1c1e;
+                --modal-btn-bg: #2c2c2e;
+                --modal-btn-active: #3a3a3c;
+                --modal-grabber: #48484a;
+                --backdrop-color: rgba(0, 0, 0, 0.6);
+
+                --seg-track-bg: #2c2c2e; 
+                --seg-indicator-bg: #636366; 
+                --seg-indicator-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+                --seg-text-active: #ffffff;
+                --seg-text-inactive: #8e8e93;
+
+                --slider-track: #3a3a3c;
+            }
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--app-bg);
+            color: var(--text-primary);
+            margin: 0;
+            height: 100dvh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .trigger-btn {
+            background-color: var(--tint-color); color: #ffffff; border: none; padding: 16px 32px;
+            font-size: 17px; font-weight: 600; border-radius: 14px; cursor: pointer;
+            box-shadow: 0 4px 14px rgba(0, 122, 255, 0.3); transition: transform 0.15s cubic-bezier(0.2, 0, 0, 1), opacity 0.15s ease;
+        }
+        .trigger-btn:active { transform: scale(0.96); opacity: 0.85; }
+
+        .modal-backdrop {
+            position: fixed; inset: 0; background-color: var(--backdrop-color); opacity: 0; pointer-events: none; z-index: 1000; transition: opacity 0.4s cubic-bezier(0.32, 0.72, 0, 1); will-change: opacity;
+        }
+        .ios-sheet {
+            position: fixed; bottom: 0; left: 0; width: 100%; height: 90dvh; background-color: var(--modal-bg); border-radius: 38px 38px 0 0; box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.15); z-index: 1001; display: flex; flex-direction: column; transform: translateY(100%); pointer-events: none; transition: transform 0.5s cubic-bezier(0.32, 0.72, 0, 1); will-change: transform;
+        }
+
+        .sheet-header { position: relative; width: 100%; height: 54px; display: flex; justify-content: center; flex-shrink: 0; touch-action: none; }
+        .sheet-grabber { width: 36px; height: 5px; background-color: var(--modal-grabber); border-radius: 3px; margin-top: 8px; }
+        .close-btn {
+            position: absolute; top: 12px; right: 16px; width: 30px; height: 30px; border-radius: 15px; background-color: var(--modal-btn-bg); border: none; display: flex; justify-content: center; align-items: center; cursor: pointer; color: var(--text-secondary); transition: background-color 0.15s ease, transform 0.1s;
+        }
+        .close-btn:active { background-color: var(--modal-btn-active); transform: scale(0.92); }
+        .close-btn svg { width: 14px; height: 14px; fill: currentColor; }
+
+        .segmented-control-container { padding: 0 16px; margin-top: 8px; width: 100%; box-sizing: border-box; flex-shrink: 0; }
+        .segmented-control { background-color: var(--seg-track-bg); display: flex; position: relative; height: 36px; border-radius: 18px; padding: 2px; overflow: hidden; }
+        
+        .segmented-indicator {
+            position: absolute; top: 2px; bottom: 2px; width: calc(16.666% - 0.66px); 
+            background-color: var(--seg-indicator-bg); box-shadow: var(--seg-indicator-shadow);
+            border-radius: 16px; 
+            /* Initialize at 200% offset to perfectly frame the default active RGB tab */
+            transform: translateX(200%); 
+            transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1); will-change: transform; pointer-events: none; 
+        }
+        
+        .segment-btn {
+            flex: 1; background: transparent; border: none; color: var(--seg-text-inactive);
+            font-size: 12px; font-weight: 500; cursor: pointer; z-index: 1; padding: 0; transition: color 0.28s ease, font-weight 0s;
+        }
+        .segment-btn.active { color: var(--seg-text-active); font-weight: 600; }
+
+        .tab-content-wrapper { flex: 1; width: 100%; overflow-y: auto; padding: 24px 20px; box-sizing: border-box; }
+        .tab-pane { display: none; flex-direction: column; gap: 12px; animation: fadeIn 0.2s ease-out; }
+        .tab-pane.active { display: flex; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+        .color-row-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+        .color-label { font-size: 13px; font-weight: 600; color: var(--text-primary); letter-spacing: 0.3px; }
+        .color-controls { display: flex; align-items: center; }
+        .color-input {
+            width: 42px; height: 20px; background-color: transparent; border: none;
+            color: var(--text-primary); font-size: 14px; font-weight: 500; text-align: right; 
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; 
+            -webkit-appearance: none; padding: 0; margin-right: 12px; transition: color 0.15s ease;
+        }
+        .color-input:focus { outline: none; color: var(--tint-color); }
+        .nudge-btn {
+            background: transparent; border: none; padding: 0; width: 22px; height: 22px;
+            cursor: pointer; display: flex; justify-content: center; align-items: center; transition: transform 0.1s cubic-bezier(0.2, 0, 0, 1), opacity 0.1s ease;
+        }
+        .nudge-btn + .nudge-btn { margin-left: 5px; }
+        .nudge-btn svg { width: 100%; height: 100%; }
+        .nudge-btn:active { transform: scale(0.9); opacity: 0.6; }
+
+        .ios-slider { -webkit-appearance: none; width: 100%; height: 32px; background: transparent; margin: 0; outline: none; }
+        .ios-slider::-webkit-slider-runnable-track { width: 100%; height: 10px; border-radius: 5px; background: linear-gradient(to right, var(--track-start, #000), var(--track-end, #fff)); }
+        
+        .slider-hue::-webkit-slider-runnable-track { background: linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%); }
+        .slider-sat::-webkit-slider-runnable-track { background: linear-gradient(to right, var(--sat-start, #808080), var(--sat-end, #ff0000)); }
+        .slider-bri::-webkit-slider-runnable-track { background: linear-gradient(to right, #000000, var(--bri-end, #ff0000)); }
+        .slider-hsl-sat::-webkit-slider-runnable-track { background: linear-gradient(to right, var(--hsl-sat-start, #808080), var(--hsl-sat-end, #ff0000)); }
+        .slider-3pt::-webkit-slider-runnable-track { background: linear-gradient(to right, var(--track-start, #000000), var(--track-mid, #ff0000), var(--track-end, #ffffff)); }
+
+        .ios-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 24px; width: 24px; border-radius: 50%;
+            background: radial-gradient(circle, var(--mixed-color) 38%, #ffffff 42%);
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.04);
+            margin-top: -7px; cursor: pointer; transition: transform 0.1s;
+        }
+        .ios-slider::-webkit-slider-thumb:active { transform: scale(1.1); }
+
+        .spectrum-container { display: flex; flex-direction: column; gap: 24px; }
+        
+        .color-field {
+            position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 12px; overflow: hidden; touch-action: none; 
+            background: linear-gradient(to bottom, transparent, #000000), linear-gradient(to right, #ffffff, var(--pure-hue)); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06);
+        }
+
+        .color-wheel {
+            position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 50%; overflow: hidden; touch-action: none;
+            background: radial-gradient(circle closest-side, #ffffff 0%, transparent 100%), 
+                        conic-gradient(from 90deg, red 0deg, yellow 60deg, lime 120deg, cyan 180deg, blue 240deg, magenta 300deg, red 360deg);
+            box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06);
+        }
+        
+        .wheel-darken-overlay { position: absolute; inset: 0; border-radius: 50%; background-color: #000000; pointer-events: none; will-change: opacity; }
+
+        .field-reticle {
+            position: absolute; width: 26px; height: 26px; border-radius: 50%; border: 2px solid #ffffff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(0,0,0,0.15); transform: translate(-50%, -50%); pointer-events: none; will-change: transform;
+        }
+
+        .modal-active .modal-backdrop { opacity: 1; pointer-events: auto; }
+        .modal-active .ios-sheet { transform: translateY(0); pointer-events: auto; }
+    </style>
+</head>
+<body>
+
+    <svg style="display: none;">
+        <defs>
+            <symbol id="icon-minus" viewBox="-1 -1 22.35 22.35"><g><path d="M10.1719 20.3516C15.7891 20.3516 20.3516 15.7969 20.3516 10.1797C20.3516 4.5625 15.7891 0 10.1719 0C4.55469 0 0 4.5625 0 10.1797C0 15.7969 4.55469 20.3516 10.1719 20.3516ZM10.1719 18.8984C5.35156 18.8984 1.45312 15 1.45312 10.1797C1.45312 5.35938 5.35156 1.46094 10.1719 1.46094C14.9922 1.46094 18.8906 5.35938 18.8906 10.1797C18.8906 15 14.9922 18.8984 10.1719 18.8984Z" fill="#d6d6d6"/><path d="M6.03906 10.9141L14.2969 10.9141C14.7734 10.9141 15.1094 10.6484 15.1094 10.2031C15.1094 9.74219 14.7969 9.46875 14.2969 9.46875L6.03906 9.46875C5.54688 9.46875 5.22656 9.74219 5.22656 10.2031C5.22656 10.6484 5.5625 10.9141 6.03906 10.9141Z" fill="#474747"/></g></symbol>
+            <symbol id="icon-plus" viewBox="-1 -1 22.35 22.35"><g><path d="M10.1719 20.3516C15.7891 20.3516 20.3516 15.7969 20.3516 10.1797C20.3516 4.5625 15.7891 0 10.1719 0C4.55469 0 0 4.5625 0 10.1797C0 15.7969 4.55469 20.3516 10.1719 20.3516ZM10.1719 18.8984C5.35156 18.8984 1.45312 15 1.45312 10.1797C1.45312 5.35938 5.35156 1.46094 10.1719 1.46094C14.9922 1.46094 18.8906 5.35938 18.8906 10.1797C18.8906 15 14.9922 18.8984 10.1719 18.8984Z" fill="#d6d6d6"/><path d="M10.8828 14.0469L10.8828 6.28906C10.8828 5.85156 10.5859 5.54688 10.1562 5.54688C9.74219 5.54688 9.44531 5.85156 9.44531 6.28906L9.44531 14.0469C9.44531 14.4766 9.74219 14.7812 10.1562 14.7812C10.5859 14.7812 10.8828 14.4844 10.8828 14.0469ZM6.28906 10.8828L14.0469 10.8828C14.4766 10.8828 14.7812 10.5938 14.7812 10.1797C14.7812 9.74219 14.4844 9.44531 14.0469 9.44531L6.28906 9.44531C5.85156 9.44531 5.55469 9.74219 5.55469 10.1797C5.55469 10.5938 5.85156 10.8828 6.28906 10.8828Z" fill="#474747"/></g></symbol>
+        </defs>
+    </svg>
+
+    <button id="triggerPicker" class="trigger-btn">Picker</button>
+
+    <div id="modalBackdrop" class="modal-backdrop"></div>
+    <div id="iosSheet" class="ios-sheet">
+        <div class="sheet-header" id="sheetHeader">
+            <div class="sheet-grabber"></div>
+            <button class="close-btn" id="closeBtn" aria-label="Close">
+                <svg viewBox="0 0 24 24"><path d="M19.3 4.71a.996.996 0 0 0-1.41 0L12 10.59 6.11 4.7a.996.996 0 1 0-1.41 1.41L10.59 12l-5.89 5.89a.996.996 0 1 0 1.41 1.41L12 13.41l5.89 5.89a.996.996 0 1 0 1.41-1.41L13.41 12l5.89-5.89c.38-.38.38-1.02 0-1.4z"/></svg>
+            </button>
+        </div>
+
+        <div class="segmented-control-container">
+            <div class="segmented-control">
+                <div class="segmented-indicator" id="segIndicator"></div>
+                <button class="segment-btn" data-index="0" data-target="tab-1">Wheel</button>
+                <button class="segment-btn" data-index="1" data-target="tab-2">Spectrum</button>
+                <button class="segment-btn active" data-index="2" data-target="tab-3">RGB</button>
+                <button class="segment-btn" data-index="3" data-target="tab-4">HSB</button>
+                <button class="segment-btn" data-index="4" data-target="tab-5">HSL</button>
+                <button class="segment-btn" data-index="5" data-target="tab-6">LAB</button>
+            </div>
+        </div>
+
+        <div class="tab-content-wrapper">
+            
+            <div class="tab-pane" id="tab-1">
+                <div class="spectrum-container">
+                    <div class="color-wheel" id="colorWheel">
+                        <div class="wheel-darken-overlay" id="wheelDarken"></div>
+                        <div class="field-reticle" id="wheelReticle"></div>
+                    </div>
+                    <input type="range" class="ios-slider slider-bri" id="wheelBriSlider" min="0" max="100" value="100">
+                </div>
+            </div>
+
+            <div class="tab-pane" id="tab-2">
+                <div class="spectrum-container">
+                    <div class="color-field" id="colorField"><div class="field-reticle" id="fieldReticle"></div></div>
+                    <input type="range" class="ios-slider slider-hue" id="spectrumHueSlider" min="0" max="360" value="0">
+                </div>
+            </div>
+
+            <div class="tab-pane active" id="tab-3">
+                <div class="color-row-header"><span class="color-label">Red</span><div class="color-controls"><input type="number" class="color-input" id="inputRed" value="255" min="0" max="255"><button class="nudge-btn" data-target="inputRed" data-step="-1"><svg><use href="#icon-minus"></use></svg></button><button class="nudge-btn" data-target="inputRed" data-step="1"><svg><use href="#icon-plus"></use></svg></button></div></div><input type="range" class="ios-slider slider-red" id="sliderRed" min="0" max="255" value="255">
+                <div class="color-row-header"><span class="color-label">Green</span><div class="color-controls"><input type="number" class="color-input" id="inputGreen" value="59" min="0" max="255"><button class="nudge-btn" data-target="inputGreen" data-step="-1"><svg><use href="#icon-minus"></use></svg></button><button class="nudge-btn" data-target="inputGreen" data-step="1"><svg><use href="#icon-plus"></use></svg></button></div></div><input type="range" class="ios-slider slider-green" id="sliderGreen" min="0" max="255" value="59">
+                <div class="color-row-header"><span class="color-label">Blue</span><div class="color-controls"><input type="number" class="color-input" id="inputBlue" value="48" min="0" max="255"><button class="nudge-btn" data-target="inputBlue" data-step="-1"><svg><use href="#icon-minus"></use></svg></button><button class="nudge-btn" data-target="inputBlue" data-step="1"><svg><use href="#icon-plus"></use></svg></button></div></div><input type="range" class="ios-slider slider-blue" id="sliderBlue" min="0" max="255" value="48">
+            </div>
+
+            <div class="tab-pane" id="tab-4">
+                <div class="color-row-header"><span class="color-label">Hue</span><div class="color-controls"><input type="number" class="color-input" id="inputHue" value="0" min="0" max="360"><button class="nudge-btn" data-target="inputHue" data-step="-1"><svg><use href="#icon-minus"></use></svg></button><button class="nudge-btn" data-target="inputHue" data-step="1"><svg><use href="#icon-plus"></use></svg></button></div></div><input type="range" class="ios-slider slider-hue" id="sliderHue" min="0" max="360" value="0">
+                <div class="color-row-header"><span class="color-label">Saturation</span><div class="color-controls"><input type="number" class="color-input" id="inputSat" value="100" min="0" max="100"><button class="nudge-btn" data-target="inputSat" data-step="-1"><svg><use href="#icon-minus"></use></svg></button><button class="nudge-btn" data-target="inputSat" data-step="1"><svg><use href="#icon-plus"></use></svg></button></div></div><input type="range" class="ios-slider slider-sat" id="sliderSat" min="0" max="100" value="100">
+                <div class="color-row-header"><span class="color-label">Brightness</span><div class="color-controls"><input type="number" class="color-input" id="inputBri" value="100" min="0" max="100"><button class="nudge-btn" data-target="inputBri" data-step="-1"><svg><use href="#icon-minus"></use></svg></button><button class="nudge-btn" data-target="inputBri" data-step="1"><svg><use href="#icon-plus"></use></svg></button></div></div><input type="range" class="ios-slider slider-bri" id="sliderBri" min="0" max="100" value="100">
+            </div>
+
+            <div class="tab-pane" id="tab-5">
+                <div class="color-row-header"><span class="color-label">Hue</span><div class="color-controls"><input type="number" class="color-input" id="inputHslHue" value="0" min="0" max="360"><button class="nudge-btn" data-target="inputHslHue" data-step="-1"><svg><use href="#icon-minus"></use></svg></button><button class="nudge-btn" data-target="inputHslHue" data-step="1"><svg><use href="#icon-plus"></use></svg></button></div></div><input type="range" class="ios-slider slider-hue" id="sliderHslHue" min="0" max="360" value="0">
+                <div class="color-row-header"><span class="color-label">Saturation</span><div class="color-controls"><input type="number" class="color-input" id="inputHslSat" value="100" min="0" max="100"><button class="nudge-btn" data-target="inputHslSat" data-step="-1"><svg><use href="#icon-minus"></use></svg></button><button class="nudge-btn" data-target="inputHslSat" data-step="1"><svg><use href="#icon-plus"></use></svg></button></div></div><input type="range" class="ios-slider slider-hsl-sat" id="sliderHslSat" min="0" max="100" value="100">
+                <div class="color-row-header"><span class="color-label">Lightness</span><div class="color-controls"><input type="number" class="color-input" id="inputHslLum" value="50" min="0" max="100"><button class="nudge-btn" data-target="inputHslLum" data-step="-1"><svg><use href="#icon-minus"></use></svg></button><button class="nudge-btn" data-target="inputHslLum" data-step="1"><svg><use href="#icon-plus"></use></svg></button></div></div><input type="range" class="ios-slider slider-3pt slider-hsl-lum" id="sliderHslLum" min="0" max="100" value="50">
+            </div>
+
+            <div class="tab-pane" id="tab-6">
+                <div class="color-row-header"><span class="color-label">Luminance</span><div class="color-controls"><input type="number" class="color-input" id="inputLabL" value="50" min="0" max="100"><button class="nudge-btn" data-target="inputLabL" data-step="-1"><svg><use href="#icon-minus"></use></svg></button><button class="nudge-btn" data-target="inputLabL" data-step="1"><svg><use href="#icon-plus"></use></svg></button></div></div><input type="range" class="ios-slider slider-3pt" id="sliderLabL" min="0" max="100" value="50">
+                <div class="color-row-header"><span class="color-label">A (Red-Green)</span><div class="color-controls"><input type="number" class="color-input" id="inputLabA" value="0" min="-128" max="127"><button class="nudge-btn" data-target="inputLabA" data-step="-1"><svg><use href="#icon-minus"></use></svg></button><button class="nudge-btn" data-target="inputLabA" data-step="1"><svg><use href="#icon-plus"></use></svg></button></div></div><input type="range" class="ios-slider slider-3pt" id="sliderLabA" min="-128" max="127" value="0">
+                <div class="color-row-header"><span class="color-label">B (Blue-Yellow)</span><div class="color-controls"><input type="number" class="color-input" id="inputLabB" value="0" min="-128" max="127"><button class="nudge-btn" data-target="inputLabB" data-step="-1"><svg><use href="#icon-minus"></use></svg></button><button class="nudge-btn" data-target="inputLabB" data-step="1"><svg><use href="#icon-plus"></use></svg></button></div></div><input type="range" class="ios-slider slider-3pt" id="sliderLabB" min="-128" max="127" value="0">
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const triggerBtn = document.getElementById('triggerPicker'); const backdrop = document.getElementById('modalBackdrop'); const sheet = document.getElementById('iosSheet'); const closeBtn = document.getElementById('closeBtn'); const sheetHeader = document.getElementById('sheetHeader');
+        function openSheet() { sheet.style.transform = ''; document.body.classList.add('modal-active'); }
+        function closeSheet() { document.body.classList.remove('modal-active'); setTimeout(() => { sheet.style.transform = ''; }, 500); }
+        triggerBtn.addEventListener('click', openSheet); backdrop.addEventListener('click', closeSheet); closeBtn.addEventListener('click', closeSheet);
+
+        let startY = 0; let currentY = 0; let isDraggingHeader = false; const DISMISSAL_THRESHOLD = 120; 
+        sheetHeader.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; currentY = startY; isDraggingHeader = true; sheet.style.transition = 'none'; }, { passive: true });
+        sheetHeader.addEventListener('touchmove', (e) => { if (!isDraggingHeader) return; currentY = e.touches[0].clientY; const deltaY = currentY - startY; if (deltaY > 0) { e.preventDefault(); sheet.style.transform = `translateY(${deltaY}px)`; } }, { passive: false });
+        sheetHeader.addEventListener('touchend', () => { if (!isDraggingHeader) return; isDraggingHeader = false; sheet.style.transition = ''; const deltaY = currentY - startY; if (deltaY > DISMISSAL_THRESHOLD) { closeSheet(); } else { sheet.style.transform = ''; } });
+
+        const segButtons = document.querySelectorAll('.segment-btn'); const segIndicator = document.getElementById('segIndicator'); const tabPanes = document.querySelectorAll('.tab-pane');
+        segButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                segButtons.forEach(b => b.classList.remove('active')); e.target.classList.add('active');
+                segIndicator.style.transform = `translateX(${e.target.getAttribute('data-index') * 100}%)`;
+                tabPanes.forEach(pane => { pane.classList.remove('active'); if (pane.id === e.target.getAttribute('data-target')) pane.classList.add('active'); });
+            });
+        });
+
+        // --- Core Mathematical Conversion Algorithms ---
+        function hsvToRgb(h, s, v) {
+            let r, g, b; let i = Math.floor((h / 360) * 6); let f = (h / 360) * 6 - i; let p = v * (1 - s); let q = v * (1 - f * s); let t = v * (1 - (1 - f) * s);
+            switch (i % 6) { case 0: r = v; g = t; b = p; break; case 1: r = q; g = v; b = p; break; case 2: r = p; g = v; b = t; break; case 3: r = p; g = q; b = v; break; case 4: r = t; g = p; b = v; break; case 5: r = v; g = p; b = q; break; }
+            return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+        }
+
+        function rgbToHsv(r, g, b) {
+            r /= 255; g /= 255; b /= 255; let max = Math.max(r, g, b), min = Math.min(r, g, b); let h, s, v = max; let d = max - min; s = max === 0 ? 0 : d / max;
+            if (max === min) h = 0; else { switch (max) { case r: h = (g - b) / d + (g < b ? 6 : 0); break; case g: h = (b - r) / d + 2; break; case b: h = (r - g) / d + 4; break; } h /= 6; }
+            return { h: h * 360, s: s, v: v };
+        }
+
+        function hsvToHsl(h, s, v) { let l = v * (1 - s / 2); let sl = (l === 0 || l === 1) ? 0 : (v - l) / Math.min(l, 1 - l); return { h: h, s: sl, l: l }; }
+        function hslToHsv(h, sl, l) { let v = l + sl * Math.min(l, 1 - l); let s = (v === 0) ? 0 : 2 * (1 - l / v); return { h: h, s: s, v: v }; }
+        function hslToRgb(h, s, l) {
+            let r, g, b; if (s === 0) { r = g = b = l; } else {
+                const hue2rgb = (p, q, t) => { if (t < 0) t += 1; if (t > 1) t -= 1; if (t < 1/6) return p + (q - p) * 6 * t; if (t < 1/2) return q; if (t < 2/3) return p + (q - p) * (2/3 - t) * 6; return p; };
+                const q = l < 0.5 ? l * (1 + s) : l + s - l * s; const p = 2 * l - q;
+                r = hue2rgb(p, q, h / 360 + 1/3); g = hue2rgb(p, q, h / 360); b = hue2rgb(p, q, h / 360 - 1/3);
+            }
+            return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+        }
+
+        function rgbToXyz(r, g, b) {
+            r /= 255; g /= 255; b /= 255; r = r > 0.04045 ? Math.pow((r + 0.055) / 1.055, 2.4) : r / 12.92; g = g > 0.04045 ? Math.pow((g + 0.055) / 1.055, 2.4) : g / 12.92; b = b > 0.04045 ? Math.pow((b + 0.055) / 1.055, 2.4) : b / 12.92;
+            return { x: (r * 0.4124 + g * 0.3576 + b * 0.1805) * 100, y: (r * 0.2126 + g * 0.7152 + b * 0.0722) * 100, z: (r * 0.0193 + g * 0.1192 + b * 0.9505) * 100 };
+        }
+        function xyzToLab(x, y, z) {
+            x /= 95.047; y /= 100.000; z /= 108.883; const f = t => t > 0.008856 ? Math.pow(t, 1/3) : (7.787 * t) + (16 / 116);
+            return { l: (116 * f(y)) - 16, a: 500 * (f(x) - f(y)), b: 200 * (f(y) - f(z)) };
+        }
+        function rgbToLab(r, g, b) { const xyz = rgbToXyz(r, g, b); return xyzToLab(xyz.x, xyz.y, xyz.z); }
+
+        function labToXyz(l, a, b) {
+            let y = (l + 16) / 116; let x = a / 500 + y; let z = y - b / 200; const fInv = t => Math.pow(t, 3) > 0.008856 ? Math.pow(t, 3) : (t - 16 / 116) / 7.787;
+            return { x: fInv(x) * 95.047, y: fInv(y) * 100.000, z: fInv(z) * 108.883 };
+        }
+        function xyzToRgb(x, y, z) {
+            x /= 100; y /= 100; z /= 100; let r = x * 3.2406 + y * -1.5372 + z * -0.4986; let g = x * -0.9689 + y * 1.8758 + z * 0.0415; let b = x * 0.0557 + y * -0.2040 + z * 1.0570;
+            const f = t => t > 0.0031308 ? 1.055 * Math.pow(t, 1/2.4) - 0.055 : 12.92 * t;
+            r = Math.max(0, Math.min(1, f(r))); g = Math.max(0, Math.min(1, f(g))); b = Math.max(0, Math.min(1, f(b)));
+            return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+        }
+        function labToRgb(l, a, b) { const xyz = labToXyz(l, a, b); return xyzToRgb(xyz.x, xyz.y, xyz.z); }
+
+        // --- Unified Master State ---
+        let stateH = 0, stateS = 0.77, stateV = 1; 
+
+        // DOM Maps
+        const colorField = document.getElementById('colorField'); const fieldReticle = document.getElementById('fieldReticle'); const spectrumHueSlider = document.getElementById('spectrumHueSlider');
+        const colorWheel = document.getElementById('colorWheel'); const wheelReticle = document.getElementById('wheelReticle'); const wheelDarken = document.getElementById('wheelDarken'); const wheelBriSlider = document.getElementById('wheelBriSlider');
+        
+        const inputs = {
+            red: document.getElementById('inputRed'), green: document.getElementById('inputGreen'), blue: document.getElementById('inputBlue'),
+            hsbH: document.getElementById('inputHue'), hsbS: document.getElementById('inputSat'), hsbB: document.getElementById('inputBri'),
+            hslH: document.getElementById('inputHslHue'), hslS: document.getElementById('inputHslSat'), hslL: document.getElementById('inputHslLum'),
+            labL: document.getElementById('inputLabL'), labA: document.getElementById('inputLabA'), labB: document.getElementById('inputLabB')
+        };
+        const sliders = {
+            red: document.getElementById('sliderRed'), green: document.getElementById('sliderGreen'), blue: document.getElementById('sliderBlue'),
+            hsbH: document.getElementById('sliderHue'), hsbS: document.getElementById('sliderSat'), hsbB: document.getElementById('sliderBri'),
+            hslH: document.getElementById('sliderHslHue'), hslS: document.getElementById('sliderHslSat'), hslL: document.getElementById('sliderHslLum'),
+            labL: document.getElementById('sliderLabL'), labA: document.getElementById('sliderLabA'), labB: document.getElementById('sliderLabB')
+        };
+
+        // Pipeline 1: Push Truth to all UI Elements
+        function renderFromState() {
+            const rgb = hsvToRgb(stateH, stateS, stateV);
+            const pureRgb = hsvToRgb(stateH, 1, 1);
+            const hsl = hsvToHsl(stateH, stateS, stateV);
+            const lab = rgbToLab(rgb.r, rgb.g, rgb.b);
+            
+            document.documentElement.style.setProperty('--pure-hue', `rgb(${pureRgb.r}, ${pureRgb.g}, ${pureRgb.b})`);
+            document.documentElement.style.setProperty('--mixed-color', `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`);
+
+            // Tab 1: Wheel Updates
+            wheelBriSlider.value = Math.round(stateV * 100);
+            const briEndRgb = hsvToRgb(stateH, stateS, 1);
+            wheelBriSlider.style.setProperty('--bri-end', `rgb(${briEndRgb.r}, ${briEndRgb.g}, ${briEndRgb.b})`);
+            wheelDarken.style.opacity = 1 - stateV;
+            const angleRad = stateH * Math.PI / 180;
+            const reticleX = 50 + (stateS * 50 * Math.cos(angleRad));
+            const reticleY = 50 + (stateS * 50 * Math.sin(angleRad));
+            wheelReticle.style.left = `${reticleX}%`;
+            wheelReticle.style.top = `${reticleY}%`;
+
+            // Tab 2: Spectrum Updates
+            spectrumHueSlider.value = stateH; fieldReticle.style.left = `${stateS * 100}%`; fieldReticle.style.top = `${(1 - stateV) * 100}%`;
+
+            // Tab 3: RGB Updates
+            inputs.red.value = rgb.r; sliders.red.value = rgb.r; inputs.green.value = rgb.g; sliders.green.value = rgb.g; inputs.blue.value = rgb.b; sliders.blue.value = rgb.b;
+            sliders.red.style.setProperty('--track-start', `rgb(0, ${rgb.g}, ${rgb.b})`); sliders.red.style.setProperty('--track-end', `rgb(255, ${rgb.g}, ${rgb.b})`);
+            sliders.green.style.setProperty('--track-start', `rgb(${rgb.r}, 0, ${rgb.b})`); sliders.green.style.setProperty('--track-end', `rgb(${rgb.r}, 255, ${rgb.b})`);
+            sliders.blue.style.setProperty('--track-start', `rgb(${rgb.r}, ${rgb.g}, 0)`); sliders.blue.style.setProperty('--track-end', `rgb(${rgb.r}, ${rgb.g}, 255)`);
+
+            // Tab 4: HSB Updates
+            inputs.hsbH.value = Math.round(stateH); sliders.hsbH.value = Math.round(stateH);
+            inputs.hsbS.value = Math.round(stateS * 100); sliders.hsbS.value = Math.round(stateS * 100);
+            inputs.hsbB.value = Math.round(stateV * 100); sliders.hsbB.value = Math.round(stateV * 100);
+            const satStartRgb = hsvToRgb(stateH, 0, stateV); const satEndRgb = hsvToRgb(stateH, 1, stateV);
+            sliders.hsbS.style.setProperty('--sat-start', `rgb(${satStartRgb.r}, ${satStartRgb.g}, ${satStartRgb.b})`); sliders.hsbS.style.setProperty('--sat-end', `rgb(${satEndRgb.r}, ${satEndRgb.g}, ${satEndRgb.b})`);
+            sliders.hsbB.style.setProperty('--bri-end', `rgb(${briEndRgb.r}, ${briEndRgb.g}, ${briEndRgb.b})`);
+
+            // Tab 5: HSL Updates
+            inputs.hslH.value = Math.round(stateH); sliders.hslH.value = Math.round(stateH);
+            inputs.hslS.value = Math.round(hsl.s * 100); sliders.hslS.value = Math.round(hsl.s * 100);
+            inputs.hslL.value = Math.round(hsl.l * 100); sliders.hslL.value = Math.round(hsl.l * 100);
+            const hslSatStartRgb = hslToRgb(hsl.h, 0, hsl.l); const hslSatEndRgb = hslToRgb(hsl.h, 1, hsl.l); const hslLumMidRgb = hslToRgb(hsl.h, hsl.s, 0.5);
+            sliders.hslS.style.setProperty('--hsl-sat-start', `rgb(${hslSatStartRgb.r}, ${hslSatStartRgb.g}, ${hslSatStartRgb.b})`); sliders.hslS.style.setProperty('--hsl-sat-end', `rgb(${hslSatEndRgb.r}, ${hslSatEndRgb.g}, ${hslSatEndRgb.b})`);
+            sliders.hslL.style.setProperty('--track-start', '#000000'); sliders.hslL.style.setProperty('--track-mid', `rgb(${hslLumMidRgb.r}, ${hslLumMidRgb.g}, ${hslLumMidRgb.b})`); sliders.hslL.style.setProperty('--track-end', '#ffffff');
+
+            // Tab 6: LAB Updates
+            inputs.labL.value = Math.round(lab.l); sliders.labL.value = Math.round(lab.l);
+            inputs.labA.value = Math.round(lab.a); sliders.labA.value = Math.round(lab.a);
+            inputs.labB.value = Math.round(lab.b); sliders.labB.value = Math.round(lab.b);
+            const labL0 = labToRgb(0, lab.a, lab.b); const labL50 = labToRgb(50, lab.a, lab.b); const labL100 = labToRgb(100, lab.a, lab.b);
+            sliders.labL.style.setProperty('--track-start', `rgb(${labL0.r},${labL0.g},${labL0.b})`); sliders.labL.style.setProperty('--track-mid', `rgb(${labL50.r},${labL50.g},${labL50.b})`); sliders.labL.style.setProperty('--track-end', `rgb(${labL100.r},${labL100.g},${labL100.b})`);
+            const labAStart = labToRgb(lab.l, -128, lab.b); const labAMid = labToRgb(lab.l, 0, lab.b); const labAEnd = labToRgb(lab.l, 127, lab.b);
+            sliders.labA.style.setProperty('--track-start', `rgb(${labAStart.r},${labAStart.g},${labAStart.b})`); sliders.labA.style.setProperty('--track-mid', `rgb(${labAMid.r},${labAMid.g},${labAMid.b})`); sliders.labA.style.setProperty('--track-end', `rgb(${labAEnd.r},${labAEnd.g},${labAEnd.b})`);
+            const labBStart = labToRgb(lab.l, lab.a, -128); const labBMid = labToRgb(lab.l, lab.a, 0); const labBEnd = labToRgb(lab.l, lab.a, 127);
+            sliders.labB.style.setProperty('--track-start', `rgb(${labBStart.r},${labBStart.g},${labBStart.b})`); sliders.labB.style.setProperty('--track-mid', `rgb(${labBMid.r},${labBMid.g},${labBMid.b})`); sliders.labB.style.setProperty('--track-end', `rgb(${labBEnd.r},${labBEnd.g},${labBEnd.b})`);
+        }
+
+        // Pipeline Digests
+        function syncFromRGB() {
+            const hsv = rgbToHsv(parseInt(inputs.red.value, 10)||0, parseInt(inputs.green.value, 10)||0, parseInt(inputs.blue.value, 10)||0);
+            if (hsv.s !== 0 && hsv.v !== 0) stateH = hsv.h; stateS = hsv.s; stateV = hsv.v; renderFromState();
+        }
+        function syncFromHSB() {
+            stateH = Math.max(0, Math.min(360, parseInt(inputs.hsbH.value, 10)||0)); stateS = Math.max(0, Math.min(100, parseInt(inputs.hsbS.value, 10)||0)) / 100; stateV = Math.max(0, Math.min(100, parseInt(inputs.hsbB.value, 10)||0)) / 100; renderFromState();
+        }
+        function syncFromHSL() {
+            const hsv = hslToHsv(Math.max(0, Math.min(360, parseInt(inputs.hslH.value, 10)||0)), Math.max(0, Math.min(100, parseInt(inputs.hslS.value, 10)||0)) / 100, Math.max(0, Math.min(100, parseInt(inputs.hslL.value, 10)||0)) / 100);
+            stateH = hsv.h; stateS = hsv.s; stateV = hsv.v; renderFromState();
+        }
+        function syncFromLAB() {
+            const rgb = labToRgb(Math.max(0, Math.min(100, parseInt(inputs.labL.value, 10)||0)), Math.max(-128, Math.min(127, parseInt(inputs.labA.value, 10)||0)), Math.max(-128, Math.min(127, parseInt(inputs.labB.value, 10)||0)));
+            const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+            if (hsv.s !== 0 && hsv.v !== 0) stateH = hsv.h; stateS = hsv.s; stateV = hsv.v; renderFromState();
+        }
+        function syncFromWheelBri() {
+            stateV = Math.max(0, Math.min(100, parseInt(wheelBriSlider.value, 10)||0)) / 100; renderFromState();
+        }
+
+        // --- Interaction Drag Physics ---
+        
+        spectrumHueSlider.addEventListener('input', (e) => { stateH = parseFloat(e.target.value); renderFromState(); });
+        let isDraggingField = false;
+        function updateFieldFromPointer(e) {
+            const rect = colorField.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            stateS = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)); stateV = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)); renderFromState();
+        }
+        colorField.addEventListener('mousedown', (e) => { isDraggingField = true; updateFieldFromPointer(e); }); colorField.addEventListener('touchstart', (e) => { isDraggingField = true; updateFieldFromPointer(e); e.preventDefault(); }, {passive: false});
+        
+        wheelBriSlider.addEventListener('input', syncFromWheelBri);
+        let isDraggingWheel = false;
+        function updateWheelFromPointer(e) {
+            const rect = colorWheel.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const dx = clientX - centerX;
+            const dy = clientY - centerY;
+            
+            let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            if (angle < 0) angle += 360;
+            
+            const radius = Math.sqrt(dx*dx + dy*dy);
+            const maxRadius = rect.width / 2;
+            
+            stateH = angle;
+            stateS = Math.min(1, radius / maxRadius);
+            renderFromState();
+        }
+        colorWheel.addEventListener('mousedown', (e) => { isDraggingWheel = true; updateWheelFromPointer(e); }); colorWheel.addEventListener('touchstart', (e) => { isDraggingWheel = true; updateWheelFromPointer(e); e.preventDefault(); }, {passive: false});
+
+        window.addEventListener('mousemove', (e) => { if(isDraggingField) updateFieldFromPointer(e); if(isDraggingWheel) updateWheelFromPointer(e); }); 
+        window.addEventListener('touchmove', (e) => { if(isDraggingField) updateFieldFromPointer(e); if(isDraggingWheel) updateWheelFromPointer(e); }, {passive: false});
+        window.addEventListener('mouseup', () => { isDraggingField = false; isDraggingWheel = false; }); 
+        window.addEventListener('touchend', () => { isDraggingField = false; isDraggingWheel = false; });
+
+        // Logic Generators
+        function bindChannel(inputEl, sliderEl, syncMethod, maxVal, minVal = 0) {
+            sliderEl.addEventListener('input', (e) => { inputEl.value = e.target.value; syncMethod(); });
+            inputEl.addEventListener('input', (e) => { let v = parseInt(e.target.value, 10); if (!isNaN(v)) { sliderEl.value = Math.max(minVal, Math.min(maxVal, v)); syncMethod(); } });
+            inputEl.addEventListener('change', (e) => { let v = parseInt(e.target.value, 10); if (isNaN(v)) v = minVal; if (v < minVal) v = minVal; if (v > maxVal) v = maxVal; e.target.value = v; sliderEl.value = v; syncMethod(); });
+        }
+
+        bindChannel(inputs.red, sliders.red, syncFromRGB, 255); bindChannel(inputs.green, sliders.green, syncFromRGB, 255); bindChannel(inputs.blue, sliders.blue, syncFromRGB, 255);
+        bindChannel(inputs.hsbH, sliders.hsbH, syncFromHSB, 360); bindChannel(inputs.hsbS, sliders.hsbS, syncFromHSB, 100); bindChannel(inputs.hsbB, sliders.hsbB, syncFromHSB, 100);
+        bindChannel(inputs.hslH, sliders.hslH, syncFromHSL, 360); bindChannel(inputs.hslS, sliders.hslS, syncFromHSL, 100); bindChannel(inputs.hslL, sliders.hslL, syncFromHSL, 100);
+        bindChannel(inputs.labL, sliders.labL, syncFromLAB, 100); bindChannel(inputs.labA, sliders.labA, syncFromLAB, 127, -128); bindChannel(inputs.labB, sliders.labB, syncFromLAB, 127, -128);
+
+        document.querySelectorAll('.nudge-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetInput = document.getElementById(btn.getAttribute('data-target'));
+                const step = parseInt(btn.getAttribute('data-step'), 10);
+                const minAttr = targetInput.getAttribute('min'); const minBoundary = minAttr !== null ? parseInt(minAttr, 10) : 0;
+                const maxAttr = targetInput.getAttribute('max'); const maxBoundary = maxAttr !== null ? parseInt(maxAttr, 10) : 255;
+                let current = parseInt(targetInput.value, 10); if (isNaN(current)) current = 0;
+                targetInput.value = Math.max(minBoundary, Math.min(maxBoundary, current + step));
+                targetInput.dispatchEvent(new Event('change'));
+            });
+        });
+
+        // Initialize
+        renderFromState();
+
+    </script>
+
+</body>
+</html>
