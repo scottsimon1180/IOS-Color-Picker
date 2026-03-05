@@ -91,12 +91,10 @@
         .action-btn:active { transform: scale(0.85); }
         .action-btn svg { width: 24px; height: 24px; fill: currentColor; }
 
-        /* Lock Toggle Matrix */
         .icon-unlock { display: none; }
         #mode-toggle.unlocked .icon-lock { display: none; }
         #mode-toggle.unlocked .icon-unlock { display: block; }
 
-        /* Tri-State Selection Matrix */
         .icon-rect, .icon-lasso { display: none; }
         #select-mode-toggle.mode-rect .icon-crosshair { display: none; }
         #select-mode-toggle.mode-rect .icon-rect { display: block; }
@@ -184,16 +182,14 @@
         
         #lassoCanvas { z-index: 16; }
 
+        /* Structurally reduced to an invisible handle scaffolding */
         #selection-marquee {
             position: absolute; 
             top: 0; left: 0;
-            border: 1px dashed #ffffff;
-            box-shadow: 0 0 0 1px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(0,0,0,0.5);
             pointer-events: none; 
             z-index: 101;
             display: none;
             will-change: transform, width, height;
-            background-color: rgba(255, 255, 255, 0.15);
             transform-origin: top left;
         }
 
@@ -204,6 +200,7 @@
             border: 1px solid #000000;
             transform: translate(-50%, -50%);
             box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+            pointer-events: auto;
         }
 
         .h-nw { top: 0; left: 0; }
@@ -488,9 +485,9 @@
     let isLocked = true;
     let isGridOn = false;
     
-    // 0 = Individual Pixel, 1 = Rectangle Average, 2 = Lasso Average
     let selectionMode = 0; 
     let fitScale = 1;
+    let marchOffset = 0; // Animation offset for marching ants
     
     let lastR = null, lastG = null, lastB = null;
 
@@ -498,13 +495,11 @@
     let dragStartTouch = { x: 0, y: 0 };
     let dragStartCrosshair = { x: 0, y: 0 };
     
-    // Rect Marquee variables
     let marqueeRect = null; 
     let marqueeResizeAction = null; 
     let interactionStartImgPixel = { x: 0, y: 0 };
     let interactionStartMarquee = null;
     
-    // Lasso Marquee variables
     let lassoPoints = [];
     let startLassoPoints = [];
 
@@ -533,7 +528,7 @@
         gridCanvas.height = rect.height;
         lassoCanvas.width = rect.width;
         lassoCanvas.height = rect.height;
-        if (cachedImageData) { drawGrid(); drawLasso(); }
+        if (cachedImageData) drawGrid();
     }
     
     window.addEventListener('resize', resizeGrid);
@@ -574,22 +569,18 @@
             if (selectionMode === 0) {
                 crosshair.style.display = 'block';
                 selectionMarquee.style.display = 'none';
-                drawLasso(); 
             } else if (selectionMode === 1) {
                 crosshair.style.display = 'none';
-                if (marqueeRect) updateMarqueeVisuals();
-                drawLasso(); 
+                if (marqueeRect) updateMarqueeHandles();
             } else if (selectionMode === 2) {
                 crosshair.style.display = 'none';
                 selectionMarquee.style.display = 'none';
-                drawLasso();
             }
         } else {
             modeToggle.classList.remove('locked');
             modeToggle.classList.add('unlocked');
             crosshair.style.display = 'none';
             selectionMarquee.style.display = 'none';
-            drawLasso(); 
         }
     }
 
@@ -738,10 +729,14 @@
         gridCtx.stroke();
     }
 
-    function drawLasso() {
+    // High-performance hardware-accelerated unified selection renderer
+    function drawSelectionBorders() {
         lassoCtx.clearRect(0, 0, lassoCanvas.width, lassoCanvas.height);
         
-        if (selectionMode !== 2 || lassoPoints.length < 2 || (!isLocked && !isDragging)) return;
+        if (selectionMode === 0) return;
+        if (selectionMode === 1 && !marqueeRect) return;
+        if (selectionMode === 2 && lassoPoints.length < 2) return;
+        if (!isLocked && !isDragging) return;
 
         const cw = lassoCanvas.width;
         const ch = lassoCanvas.height;
@@ -753,27 +748,66 @@
         const imgTop = (ch / 2) - (sh / 2) + currentPanY;
 
         lassoCtx.beginPath();
-        
-        for (let i = 0; i < lassoPoints.length; i++) {
-            const screenX = imgLeft + lassoPoints[i].x * trueScale;
-            const screenY = imgTop + lassoPoints[i].y * trueScale;
+
+        if (selectionMode === 1) { // Render Rectangle
+            const norm = getNormalizedMarquee();
+            if (!norm) return;
+            const x = imgLeft + norm.minX * trueScale;
+            const y = imgTop + norm.minY * trueScale;
+            const w = (norm.maxX - norm.minX + 1) * trueScale;
+            const h = (norm.maxY - norm.minY + 1) * trueScale;
+            lassoCtx.rect(x, y, w, h);
+        } else if (selectionMode === 2) { // Render Sleek Lasso Curve
+            const getPt = (i) => ({
+                x: imgLeft + lassoPoints[i].x * trueScale,
+                y: imgTop + lassoPoints[i].y * trueScale
+            });
+
+            const p0 = getPt(0);
+            lassoCtx.moveTo(p0.x, p0.y);
             
-            if (i === 0) lassoCtx.moveTo(screenX, screenY);
-            else lassoCtx.lineTo(screenX, screenY);
+            // Quadratic interpolation for ultra-smooth spline drawing
+            for (let i = 1; i < lassoPoints.length - 1; i++) {
+                const p1 = getPt(i);
+                const p2 = getPt(i + 1);
+                const midX = (p1.x + p2.x) / 2;
+                const midY = (p1.y + p2.y) / 2;
+                lassoCtx.quadraticCurveTo(p1.x, p1.y, midX, midY);
+            }
+            const pLast = getPt(lassoPoints.length - 1);
+            lassoCtx.lineTo(pLast.x, pLast.y);
         }
-        
+
         lassoCtx.closePath();
-        lassoCtx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+        lassoCtx.fillStyle = 'rgba(255, 255, 255, 0.15)';
         lassoCtx.fill();
-        
-        lassoCtx.strokeStyle = '#ffffff';
+
+        lassoCtx.lineCap = 'round';
+        lassoCtx.lineJoin = 'round';
+
+        // Under-stroke: Classic Solid Black
         lassoCtx.lineWidth = 1.5;
-        lassoCtx.setLineDash([5, 5]);
+        lassoCtx.strokeStyle = '#000000';
+        lassoCtx.setLineDash([]);
         lassoCtx.stroke();
-        lassoCtx.setLineDash([]); // Reset
+
+        // Over-stroke: Marching Ants Dashed White
+        lassoCtx.lineWidth = 1.5;
+        lassoCtx.strokeStyle = '#ffffff';
+        lassoCtx.setLineDash([6, 6]);
+        lassoCtx.lineDashOffset = -marchOffset;
+        lassoCtx.stroke();
     }
 
-    function updateMarqueeVisuals() {
+    // Global Animation Loop dedicated solely to visual marching ant offsets
+    function renderLoop() {
+        marchOffset += 0.5; // Smooth sub-pixel offset traversal
+        drawSelectionBorders();
+        requestAnimationFrame(renderLoop);
+    }
+    requestAnimationFrame(renderLoop);
+
+    function updateMarqueeHandles() {
         const norm = getNormalizedMarquee();
         if (!norm || selectionMode !== 1) {
             selectionMarquee.style.display = 'none';
@@ -803,8 +837,7 @@
         mainCanvas.style.transform = `translate(${currentPanX}px, ${currentPanY}px) scale(${currentScale})`;
         updateZoomOutBtnVisibility();
         drawGrid(); 
-        drawLasso();
-        if (selectionMode === 1 && isLocked) updateMarqueeVisuals();
+        if (selectionMode === 1 && isLocked) updateMarqueeHandles();
     }
 
     function handleImage(e) {
@@ -914,7 +947,6 @@
         return 'new';
     }
 
-    // Ray-Casting algorithm for polygon spatial hit-testing
     function isPointInLassoPoly(pt) {
         if (lassoPoints.length < 3) return false;
         let inside = false;
@@ -956,7 +988,6 @@
         }
     }
 
-    // High-performance offscreen geometric mask generation
     function calculateAverageLassoCore() {
         if (lassoPoints.length < 3) return;
 
@@ -998,9 +1029,8 @@
 
         for (let y = minY; y <= maxY; y++) {
             for (let x = minX; x <= maxX; x++) {
-                const maskIndex = ((y - minY) * width + (x - minX)) * 4 + 3; // Alpha channel
+                const maskIndex = ((y - minY) * width + (x - minX)) * 4 + 3; 
                 
-                // Binary pixel inclusion threshold
                 if (maskData[maskIndex] > 128) {
                     const imgIndex = (y * mainCanvas.width + x) * 4;
                     rSum += cachedImageData[imgIndex];
@@ -1031,15 +1061,15 @@
             const floatCoords = screenToImageCoordsFloat(coords.x, coords.y);
             const intPixel = { x: Math.floor(floatCoords.x), y: Math.floor(floatCoords.y) };
 
-            if (selectionMode === 1) { // Rect
+            if (selectionMode === 1) { 
                 marqueeResizeAction = getMarqueeHitAction(floatCoords.x, floatCoords.y);
                 if (marqueeResizeAction === 'new') {
                     marqueeRect = { x1: intPixel.x, y1: intPixel.y, x2: intPixel.x, y2: intPixel.y };
                 }
                 interactionStartImgPixel = intPixel;
                 interactionStartMarquee = { ...marqueeRect };
-                updateMarqueeVisuals();
-            } else if (selectionMode === 2) { // Lasso
+                updateMarqueeHandles();
+            } else if (selectionMode === 2) { 
                 if (isPointInLassoPoly(floatCoords)) {
                     marqueeResizeAction = 'move';
                     startLassoPoints = lassoPoints.map(p => ({...p}));
@@ -1048,8 +1078,7 @@
                     lassoPoints = [floatCoords]; 
                 }
                 interactionStartImgPixel = floatCoords; 
-                drawLasso();
-            } else { // Crosshair
+            } else { 
                 dragStartTouch.x = coords.x;
                 dragStartTouch.y = coords.y;
                 
@@ -1086,7 +1115,7 @@
             const coords = getClientCoords(e);
             const floatCoords = screenToImageCoordsFloat(coords.x, coords.y);
             
-            if (selectionMode === 1) { // Rect
+            if (selectionMode === 1) { 
                 const currentPixel = { x: Math.floor(floatCoords.x), y: Math.floor(floatCoords.y) };
                 const dx = currentPixel.x - interactionStartImgPixel.x;
                 const dy = currentPixel.y - interactionStartImgPixel.y;
@@ -1123,23 +1152,22 @@
 
                 if (!animationFrameId) {
                     animationFrameId = requestAnimationFrame(() => {
-                        updateMarqueeVisuals();
+                        updateMarqueeHandles();
                         triggerAverageCalculation(); 
                         animationFrameId = null;
                     });
                 }
-            } else if (selectionMode === 2) { // Lasso
+            } else if (selectionMode === 2) { 
                 if (marqueeResizeAction === 'new') {
                     const lastPoint = lassoPoints[lassoPoints.length - 1];
-                    // Dynamic decimation: drop vertices closer than 1 pixel to optimize PiP calculation
-                    if (Math.hypot(floatCoords.x - lastPoint.x, floatCoords.y - lastPoint.y) > 1) {
+                    // Dynamic decimation prevents array bloat and maintains spline smoothness
+                    if (Math.hypot(floatCoords.x - lastPoint.x, floatCoords.y - lastPoint.y) > 2) {
                         lassoPoints.push(floatCoords);
                     }
                 } else if (marqueeResizeAction === 'move') {
                     const dx = floatCoords.x - interactionStartImgPixel.x;
                     const dy = floatCoords.y - interactionStartImgPixel.y;
                     
-                    // Boundary enforcement geometry mapping
                     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
                     for (let p of startLassoPoints) {
                         if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
@@ -1157,12 +1185,11 @@
 
                 if (!animationFrameId) {
                     animationFrameId = requestAnimationFrame(() => {
-                        drawLasso();
                         triggerAverageCalculation(); 
                         animationFrameId = null;
                     });
                 }
-            } else { // Crosshair
+            } else { 
                 const deltaX = coords.x - dragStartTouch.x;
                 const deltaY = coords.y - dragStartTouch.y;
 
@@ -1221,10 +1248,8 @@
     function handleInteractionEnd() {
         isDragging = false;
         if (selectionMode === 1 && marqueeRect) calculateAverageRectCore();
-        if (selectionMode === 2 && lassoPoints.length > 2) {
-            drawLasso(); 
-            calculateAverageLassoCore();
-        }
+        if (selectionMode === 2 && lassoPoints.length > 2) calculateAverageLassoCore();
+        
         lastPinchDist = null;
         lastPinchCenter = null;
         lastPanTouch = null;
