@@ -169,7 +169,7 @@
         
         canvas.loaded { opacity: 1; }
 
-        canvas.pixelated {
+        #imageCanvas {
             image-rendering: -moz-crisp-edges;
             image-rendering: -webkit-optimize-contrast;
             image-rendering: crisp-edges;
@@ -441,8 +441,6 @@
         const b = parseInt(hex.slice(5, 7), 16);
         updateDisplay(r, g, b);
     });
-
-    const MAX_IMG_DIMENSION = 1600; 
 
     let cachedImageData = null;
     let currentHex = "";
@@ -843,12 +841,6 @@
                 
                 let width = img.width;
                 let height = img.height;
-                
-                if (width > MAX_IMG_DIMENSION || height > MAX_IMG_DIMENSION) {
-                    const ratio = Math.min(MAX_IMG_DIMENSION / width, MAX_IMG_DIMENSION / height);
-                    width = Math.floor(width * ratio);
-                    height = Math.floor(height * ratio);
-                }
 
                 resizeGrid();
 
@@ -859,6 +851,7 @@
 
                 mainCanvas.width = width;
                 mainCanvas.height = height;
+                mainCtx.imageSmoothingEnabled = false; 
                 mainCtx.clearRect(0, 0, width, height); 
                 mainCtx.drawImage(img, 0, 0, width, height);
                 
